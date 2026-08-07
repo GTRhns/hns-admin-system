@@ -1,10 +1,10 @@
 <div align="center">
 
-<img src="assets/preview.jpg" alt="HnsAdminSystem" width="640">
+<img src="assets/preview.jpg" alt="HnsAdminSuite" width="640">
 
 <br>
 
-# HnsAdminSystem — CS 1.6 封禁 + 权限管理系统
+# HnsAdminSuite — CS 1.6 封禁 + 权限管理系统
 
 [![AMX Mod X](https://img.shields.io/badge/AMX_Mod_X-1.9+-blue)]()
 [![ReGameDLL](https://img.shields.io/badge/ReGameDLL-5.x-orange)]()
@@ -42,7 +42,7 @@
 
 ## 这是什么
 
-HnsAdminSystem 是一个**独立的封禁 + 权限管理插件**。核心插件 `HnsMatchPermSystem.sma` 只负责两件事：**让服主能用一套菜单完成封禁管理、权限发放、踢人换图等全部管理操作**，并通过「文件 + PDS」双备份永久记住每个玩家的权限与封禁记录。
+HnsAdminSuite 是一个**独立的封禁 + 权限管理插件**。核心插件 `HnsAdminSuite.sma` 只负责两件事：**让服主能用一套菜单完成封禁管理、权限发放、踢人换图等全部管理操作**，并通过「文件 + PDS」双备份永久记住每个玩家的权限与封禁记录。
 
 它被设计成**完全独立**的插件：
 
@@ -63,9 +63,9 @@ HnsAdminSystem 是一个**独立的封禁 + 权限管理插件**。核心插件 
 
 ```
 hns-admin-system/
-├── HnsMatchPermSystem.sma   ← 核心插件（封禁 + 权限 + 管理菜单，独立运行）
+├── HnsAdminSuite.sma   ← 核心插件（封禁 + 权限 + 管理菜单，独立运行）
 ├── compiled/
-│   └── HnsMatchPermSystem.amxx  ← 预编译产物（开箱即用）
+│   └── HnsAdminSuite.amxx  ← 预编译产物（开箱即用）
 ├── LICENSE                  ← GPLv3 开源协议
 ├── assets/
 │   └── preview.jpg          ← 预览图
@@ -179,15 +179,15 @@ hns-admin-system/
 
 ```bash
 # 1. 编译（把脚本放到 AMXX 的 scripting/ 目录）
-amxxpc HnsMatchPermSystem.sma
+amxxpc HnsAdminSuite.sma
 ```
 
 ```bash
 # 2. 把生成的 .amxx 复制到 plugins 目录
-cp HnsMatchPermSystem.amxx <cstrike>/addons/amxmodx/plugins/
+cp HnsAdminSuite.amxx <cstrike>/addons/amxmodx/plugins/
 
 # 3. 在 plugins.ini 里启用（建议放在较后位置，后加载覆盖其它拦截）
-echo "HnsMatchPermSystem.amxx" >> <cstrike>/addons/amxmodx/configs/plugins.ini
+echo "HnsAdminSuite.amxx" >> <cstrike>/addons/amxmodx/configs/plugins.ini
 ```
 
 ```bash
@@ -221,7 +221,7 @@ amxx plugins   # 确认插件已加载
 ### `perm_list.txt`（权限名单）
 
 ```
-; HNS PermSystem Permission List
+; HNS Admin Suite Permission List
 ; StorageVersion: 2
 ; Format: steamid_or_ip name permission_level
 ; Levels: 0=normal 1=helper 2=vip 3=admin 4=owner
@@ -234,7 +234,7 @@ STEAM_0:0:916902420 pro 3
 ### `ban_list.txt`（封禁名单）
 
 ```
-; HNS PermSystem Ban List
+; HNS Admin Suite Ban List
 ; Format: "authid/ip" expire_timestamp "reason"
 ; expire 0 = permanent
 
@@ -288,7 +288,7 @@ STEAM_0:0:916902420 pro 3
 
 1. 安装 AMX Mod X SDK（含 `amxxpc` 编译器与 `include/` 头文件）。
 2. 确保能 include 到 `reapi.inc`、`PersistentDataStorage.inc`。
-3. 改完 `.sma` 后编译：`amxxpc HnsMatchPermSystem.sma`。
+3. 改完 `.sma` 后编译：`amxxpc HnsAdminSuite.sma`。
 4. 在测试服务器 `amxx plugins` 确认加载无报错。
 
 **维护约定：**
@@ -312,7 +312,7 @@ STEAM_0:0:916902420 pro 3
 
 ---
 
-**HnsAdminSystem — Admin & Ban System** — Built with passion for the CS 1.6 HNS community.
+**HnsAdminSuite — Admin & Ban System** — Built with passion for the CS 1.6 HNS community.
 维护者：**GTRHNS**
 
 ---

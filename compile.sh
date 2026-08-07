@@ -8,13 +8,13 @@ set -e
 # 脚本所在目录
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SCRIPTING="$DIR/cstrike/addons/amxmodx/scripting"
-SRC="$SCRIPTING/HnsMatchPermSystem.sma"
-OUT="$SCRIPTING/HnsMatchPermSystem.amxx"
+SRC="$SCRIPTING/HnsAdminSuite.sma"
+OUT="$SCRIPTING/HnsAdminSuite.amxx"
 
 # 需要 include 目录(标准 + reapi + PDS)
 INCLUDE_DIRS="$SCRIPTING/include"
 
-echo "==> 编译 HnsMatchPermSystem.sma"
+echo "==> 编译 HnsAdminSuite.sma"
 # 若 amxxpc 在 PATH 中则直接使用，否则尝试本地
 if command -v amxxpc >/dev/null 2>&1; then
     amxxpc "$SRC" -o"$OUT" -i"$INCLUDE_DIRS"

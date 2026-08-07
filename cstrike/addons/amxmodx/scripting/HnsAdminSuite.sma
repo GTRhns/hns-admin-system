@@ -113,7 +113,7 @@ stock perm_sync_level_from_flags(id)
 // ============================================================
 public plugin_init()
 {
-    register_plugin("HNS PermSystem", "4.1.6", "HNS Match System");
+    register_plugin("HNS Admin Suite", "4.2.0", "GTRHNS");
 
     // 命令注册
     register_clcmd("say /vipadmin", "cmdVipAdmin");
@@ -1439,7 +1439,7 @@ save_bans_file()
         return;
     }
 
-    fprintf(fp, "; HNS PermSystem Ban List^n");
+    fprintf(fp, "; HNS Admin Suite Ban List^n");
     fprintf(fp, "; Format: authid/ip expire_timestamp reason^n");
     fprintf(fp, "; expire 0 = permanent^n^n");
 
@@ -1762,7 +1762,7 @@ stock perm_save_file()
         return;
     }
 
-    fprintf(fp, "; HNS PermSystem Permission List^n");
+    fprintf(fp, "; HNS Admin Suite Permission List^n");
     fprintf(fp, "; StorageVersion: %d^n", PERM_STORAGE_VERSION);
     fprintf(fp, "; Format: steamid_or_ip name permission_level^n");
     fprintf(fp, "; Levels: 0=normal 1=helper 2=vip 3=admin 4=owner^n^n");

@@ -1,4 +1,4 @@
-; HNS PermSystem Ban List
+; HNS Admin Suite Ban List
 ; Format: "authid/ip" expire_timestamp "reason"
 ; expire 0 = permanent
 

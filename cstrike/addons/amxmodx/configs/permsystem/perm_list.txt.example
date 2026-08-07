@@ -1,4 +1,4 @@
-; HNS PermSystem Permission List
+; HNS Admin Suite Permission List
 ; StorageVersion: 2
 ; Format: steamid_or_ip name permission_level
 ; Levels: 0=normal 1=helper 2=vip 3=admin 4=owner
