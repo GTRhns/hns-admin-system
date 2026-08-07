@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="assets/preview.jpg" alt="HnsAdminSuite" width="640">
+<img src="assets/preview.png" alt="HnsAdminSuite" width="640">
 
 <br>
 
@@ -68,7 +68,7 @@ hns-admin-system/
 │   └── HnsAdminSuite.amxx  ← 预编译产物（开箱即用）
 ├── LICENSE                  ← GPLv3 开源协议
 ├── assets/
-│   └── preview.jpg          ← 预览图
+│   └── preview.png          ← 预览图
 └── cstrike/addons/amxmodx/configs/
     ├── permsystem/
     │   ├── perm_list.txt.example  ← 权限名单模板
