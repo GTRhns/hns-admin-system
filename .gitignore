@@ -1,0 +1,13 @@
+# 编译产物
+*.amxx
+*.amx
+*.so
+
+# 运行时数据（封禁/权限名单实际数据不入库）
+cstrike/addons/amxmodx/configs/permsystem/*
+!cstrike/addons/amxmodx/configs/permsystem/*.example
+
+# 临时文件
+*.gbk.bak
+*.bak
+compile_*.log
