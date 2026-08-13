@@ -8,7 +8,7 @@
 
 [![AMX Mod X](https://img.shields.io/badge/AMX_Mod_X-1.9+-blue)]()
 [![ReGameDLL](https://img.shields.io/badge/ReGameDLL-5.x-orange)]()
-[![Version](https://img.shields.io/badge/Version-1.0.0-green)]()
+[![Version](https://img.shields.io/badge/Version-5.0.0-green)]()
 [![Storage](https://img.shields.io/badge/Storage-PDS_%2B_File-9cf)]()
 [![License](https://img.shields.io/badge/License-GPLv3-success)]()
 
@@ -64,16 +64,17 @@ HnsAdminSuite 是一个**独立的封禁 + 权限管理插件**。核心插件 `
 ```
 hns-admin-system/
 ├── HnsAdminSuite.sma   ← 核心插件（封禁 + 权限 + 管理菜单，独立运行）
-├── compiled/
-│   └── HnsAdminSuite.amxx  ← 预编译产物（开箱即用）
-├── LICENSE                  ← GPLv3 开源协议
-├── assets/
-│   └── preview.png          ← 预览图
-└── cstrike/addons/amxmodx/configs/
-    ├── permsystem/
-    │   ├── perm_list.txt.example  ← 权限名单模板
-    │   └── ban_list.txt.example   ← 封禁名单模板
-    └── openhns-prefixes.ini       ← 聊天前缀（服主/管理员/VIP）
+  ├── compiled/
+  │   └── HnsAdminSuite.amxx  ← 预编译产物（开箱即用）
+  ├── LICENSE                  ← GPLv3 开源协议
+  ├── assets/
+  │   └── preview.png          ← 预览图
+  └── cstrike/addons/amxmodx/configs/
+      ├── permsystem/
+      │   ├── perm_list.ini.example      ← 权限名单模板(ini)
+      │   ├── ban_list.ini.example       ← 封禁名单模板(ini)
+      │   └── perm_config.ini.example    ← 管理密码配置模板(ini)
+      └── openhns-prefixes.ini       ← 聊天前缀（服主/管理员/VIP）
 ```
 
 ---
@@ -92,7 +93,7 @@ hns-admin-system/
    ├─→ add_ban() 读取玩家鉴权信息（SteamID 或 IP，正版/盗版都支持）
    │
    ├─→ 写入内存封禁数组 → save_bans_file() 落盘
-   │       文件：configs/permsystem/ban_list.txt
+   │       文件：configs/permsystem/ban_list.ini
    │
    └─→ 立即踢出被封禁玩家
        玩家再次连接 → client_putinserver 触发 check_ban(id)
@@ -104,7 +105,7 @@ hns-admin-system/
 
 1. **封禁触发**：管理菜单 → `handlePermBanTime` → `add_ban()`。
 2. **进服检测**：`client_putinserver` → `check_ban(id)`。
-3. **数据持久化**：封禁写进 `ban_list.txt`，重启服务器不丢。
+3. **数据持久化**：封禁写进 `ban_list.ini`，重启服务器不丢。
 4. **自动清理**：进服检测时发现过期自动移除，名单不会无限膨胀（上限 `MAX_BANS=512`）。
 
 ### 权限发放系统
@@ -193,22 +194,29 @@ echo "HnsAdminSuite.amxx" >> <cstrike>/addons/amxmodx/configs/plugins.ini
 ```bash
 # 4. 复制配置文件（模板去除 .example 后缀）
 mkdir -p <cstrike>/addons/amxmodx/configs/permsystem/
-cp cstrike/addons/amxmodx/configs/permsystem/perm_list.txt.example \
-   <cstrike>/addons/amxmodx/configs/permsystem/perm_list.txt
-cp cstrike/addons/amxmodx/configs/permsystem/ban_list.txt.example \
-   <cstrike>/addons/amxmodx/configs/permsystem/ban_list.txt
+cp cstrike/addons/amxmodx/configs/permsystem/perm_list.ini.example \
+   <cstrike>/addons/amxmodx/configs/permsystem/perm_list.ini
+cp cstrike/addons/amxmodx/configs/permsystem/ban_list.ini.example \
+   <cstrike>/addons/amxmodx/configs/permsystem/ban_list.ini
+cp cstrike/addons/amxmodx/configs/permsystem/perm_config.ini.example \
+   <cstrike>/addons/amxmodx/configs/permsystem/perm_config.ini
 cp cstrike/addons/amxmodx/configs/openhns-prefixes.ini \
    <cstrike>/addons/amxmodx/configs/
 ```
 
 ```bash
-# 5. 确认模块已启用（必须在 modules.ini 里开启）
+# 5. 编辑密码配置，上线前务必修改默认密码！
+nano <cstrike>/addons/amxmodx/configs/permsystem/perm_config.ini
+```
+
+```bash
+# 6. 确认模块已启用（必须在 modules.ini 里开启）
 echo "reapi" >> <cstrike>/addons/amxmodx/configs/modules.ini
 echo "PersistentDataStorage" >> <cstrike>/addons/amxmodx/configs/modules.ini
 ```
 
 ```bash
-# 6. 重启服务器或换图生效
+# 7. 重启服务器或换图生效
 amxx plugins   # 确认插件已加载
 ```
 
@@ -218,23 +226,37 @@ amxx plugins   # 确认插件已加载
 
 ## 配置文件说明
 
-### `perm_list.txt`（权限名单）
+所有名单文件均以 **ini 为唯一权威来源**，删除即清除对应数据，无需 recompile。
+
+### `perm_config.ini`（管理密码，双重认证核心）
 
 ```
-; HNS Admin Suite Permission List
+; ============================================
+;  HNS 管理密码配置 (ini 为权威)
+; ============================================
+;  此文件是管理密码的唯一权威来源。
+;  请修改下面的密码, 上线前务必修改默认密码!
+;  密码一经修改立即生效, 无需重新编译插件。
+admin_password = 890514
+```
+
+### `perm_list.ini`（权限名单）
+
+```
+; HNS Admin Suite 权限存储文件 (ini 为权威)
 ; StorageVersion: 2
 ; Format: steamid_or_ip name permission_level
-; Levels: 0=normal 1=helper 2=vip 3=admin 4=owner
+; Levels: 0=普通玩家 1=临时 2=VIP 3=管理员 4=服主
 
 STEAM_0:0:916902420 pro 3
 ```
 
 玩家名含空格时会自动替换为 `_`。文件采用 UTF-8 编码。
 
-### `ban_list.txt`（封禁名单）
+### `ban_list.ini`（封禁名单）
 
 ```
-; HNS Admin Suite Ban List
+; HNS Admin Suite 封禁存储文件 (ini 为权威)
 ; Format: "authid/ip" expire_timestamp "reason"
 ; expire 0 = permanent
 
@@ -252,6 +274,19 @@ STEAM_0:0:916902420 pro 3
 
 ---
 
+## 双重认证机制
+
+进入权限菜单需同时满足：
+
+1. **官方认证**：玩家已写入 `addons/amxmodx/configs/users.ini`（`is_user_admin` 标记为真）。
+2. **管理密码**：输入 `perm_config.ini` 中配置的密码。
+
+- 官方认证服主（`users.ini` 最高权限）输入正确密码后拥有**完整权限**，不受 `perm_list.ini` 限制。
+- 非官方认证玩家即使输入正确密码也**仅被拒绝、不会被封禁**，杜绝"人人都是服主"漏洞。
+- 普通玩家无法通过任何方式成为服主。
+
+---
+
 ## 命令列表
 
 | 命令 | 说明 | 权限 |
@@ -266,7 +301,7 @@ STEAM_0:0:916902420 pro 3
 
 这套架构刻意做成了"事件驱动 + 双备份持久化"，扩展点非常清晰：
 
-1. **Web 封禁面板**：基于已有的 `ban_list.txt` 格式，可对接数据库做 Web 封禁管理后台。
+1. **Web 封禁面板**：基于已有的 `ban_list.ini` 格式，可对接数据库做 Web 封禁管理后台。
 
 2. **封禁申诉系统**：被 ban 玩家可留言申诉，服主在菜单中审批。
 
@@ -293,7 +328,8 @@ STEAM_0:0:916902420 pro 3
 
 **维护约定：**
 
-- 所有名单都走 `.txt` 文件，不要硬编码封禁/权限数据。
+- 所有名单都走 `.ini` 文件（ini 为权威来源），不要硬编码封禁/权限数据。
+- 管理密码放 `perm_config.ini`，不要写死在源码里。
 - 封禁与权限键名统一加前缀（`hns_perm_`、`hns_permip_`），避免冲突。
 - 新增可复用函数用 `stock` 声明。
 - 改完记得更新模板文件与文档的注释，保持文档与实现同步。
@@ -301,7 +337,7 @@ STEAM_0:0:916902420 pro 3
 **遇到问题：**
 
 - 插件没加载 → 看 `addons/amxmodx/logs/` 下的错误日志，确认模块是否齐全。
-- 权限不保存 → 确认玩家已通过 Steam 验证（SteamID 非空），或检查 `perm_list.txt` 权限。
+- 权限不保存 → 确认玩家已通过 Steam 验证（SteamID 非空），或检查 `perm_list.ini` 权限。
 - 封禁无效 → 确认 `reapi` 模块已装，封禁名单文件编码正确。
 
 ---

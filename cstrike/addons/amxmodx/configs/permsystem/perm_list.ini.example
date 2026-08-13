@@ -1,0 +1,16 @@
+; HNS Admin Suite 权限存储文件 (ini 为权威)
+; StorageVersion: 2
+; 格式: steamid_or_ip name permission_level
+; 权限等级: 0=普通玩家 1=临时 2=VIP 3=管理员 4=服主
+;
+; 说明:
+;   - 本文件为权限的唯一权威来源, 删除即清除所有被授予的权限。
+;   - 官方认证服主(已写入 addons/amxmodx/configs/users.ini) 不受本文件限制,
+;     由 users.ini 直接管理, 拥有完整权限。
+;   - 等级含义: VIP(2) 可踢人; 管理员(3) 可踢人+封禁; 服主(4) 全部权限。
+
+; 示例: 给 SteamID 为 STEAM_0:0:916902420 的玩家授予管理员(3)权限
+STEAM_0:0:916902420 pro 3
+
+; 示例: 给盗版玩家(按IP)授予 VIP(2) 权限
+; 192.168.1.100 unknown 2

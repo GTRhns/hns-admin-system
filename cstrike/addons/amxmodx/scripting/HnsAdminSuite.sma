@@ -1,3 +1,13 @@
+// ============================================================
+//  HNS Admin Suite (修复版 5.0.0)
+//  独立给予权限系统
+//  本次修复:
+//   1. 修复全部乱码为正确中文(临时/管理员/服主等)
+//   2. 密码从硬编码改为 ini 配置(perm_config.ini), 不再重编译
+//   3. 双重认证: 官方认证(users.ini) + 密码, 非官方输对密码仅拒绝不封禁
+//   4. 存储改 ini 为权威(perm_list.ini / ban_list.ini), 清除即失效
+//   5. 修复"人人都是服主"漏洞: 仅官方认证者输对密码才能成为服主
+// ============================================================
 #include <amxmodx>
 #include <amxmisc>
 #include <reapi>
@@ -6,11 +16,11 @@
 // ============================================================
 //  权限等级定义
 // ============================================================
-#define PERM_NONE    0    // ????
-#define PERM_TEMP    1    // ????
-#define PERM_VIP     2    // VIP
-#define PERM_ADMIN   3    // ???
-#define PERM_OWNER   4    // ????
+#define PERM_NONE    0    // 普通玩家
+#define PERM_TEMP    1    // 临时
+#define PERM_VIP     2    // VIP (可踢人)
+#define PERM_ADMIN   3    // 管理员 (可封禁+踢人)
+#define PERM_OWNER   4    // 服主 (全部权限)
 
 // ============================================================
 //  常量
@@ -20,8 +30,12 @@
 #define MAX_AUTH_LEN     64
 #define MAX_NAME_LEN     32
 #define MAX_REASON_LEN   128
-#define ADMIN_PASSWORD   "890514"
 #define PERM_STORAGE_VERSION 2
+
+// 配置文件路径 (ini 为权威)
+#define PERM_FILE   "configs/permsystem/perm_list.ini"
+#define BAN_FILE    "configs/permsystem/ban_list.ini"
+#define CONFIG_FILE "configs/permsystem/perm_config.ini"
 
 // ============================================================
 //  全局变量
@@ -30,7 +44,10 @@
 // 玩家权限等级
 new g_iPermLevel[33];
 
-// 验证状态
+// 官方认证状态 (users.ini 配置的 is_user_admin, 连接时捕获)
+new bool:g_bOfficial[33];
+
+// 双重认证通过状态 (官方 + 密码)
 new bool:g_bVerified[33];
 
 // 等待密码输入状态
@@ -65,18 +82,38 @@ new g_iMapPage[33];
 new g_szMapList[256][64];
 new g_iMapCount = 0;
 
+// 管理密码 (从 perm_config.ini 读取)
+new g_szAdminPassword[32] = "890514";
+
+// ============================================================
+//  官方认证判定
+// ============================================================
+
+// 是否官方认证 (users.ini 配置)
+// 注意: 在 client_authorized 时捕获, 避免被插件 set_user_flags 污染
+stock bool:is_official(id)
+{
+    return (is_user_connected(id) && g_bOfficial[id]);
+}
+
+// 应用玩家权限标志
+// 官方认证服主: 完整权限, 不受 ini 影响
+// 纸面权限(ini): 按等级授予
 stock perm_apply_user_flags(id)
 {
     if (!is_user_connected(id)) {
         return;
     }
 
+    // 官方认证服主: 由 users.ini 管理, 不剥夺任何标志
+    if (g_bOfficial[id]) {
+        return;
+    }
+
     new iFlags = get_user_flags(id);
 
-    // ★ 先清除服主标记 m，避免发管理员/低权限时仍叠加显示"服主"
-    //   (openhns-prefixes.ini: m=服主, d=管理员)
-    //   注意: 清除 m 后，PERM_OWNER 分支会重新加回完整权限(含 m)
-    iFlags &= ~read_flags("m");
+    // 清除插件曾授予的纸面权限标志, 避免残留
+    iFlags &= ~(read_flags("m") | read_flags("b") | read_flags("d") | read_flags("e") | read_flags("f") | read_flags("i") | read_flags("u"));
 
     switch (g_iPermLevel[id]) {
         case PERM_OWNER: set_user_flags(id, iFlags | read_flags("abcdefghijklmnou"));
@@ -96,15 +133,15 @@ stock perm_level_from_flags(iFlags)
     return PERM_NONE;
 }
 
-stock perm_sync_level_from_flags(id)
+stock perm_level_name(iLevel, szOut[], iLen)
 {
-    if (!is_user_connected(id)) {
-        return;
-    }
-
-    new iDetectedLevel = perm_level_from_flags(get_user_flags(id));
-    if (iDetectedLevel > g_iPermLevel[id]) {
-        g_iPermLevel[id] = iDetectedLevel;
+    switch (iLevel) {
+        case PERM_NONE:  copy(szOut, iLen, "普通玩家");
+        case PERM_TEMP:  copy(szOut, iLen, "临时");
+        case PERM_VIP:   copy(szOut, iLen, "VIP");
+        case PERM_ADMIN: copy(szOut, iLen, "管理员");
+        case PERM_OWNER: copy(szOut, iLen, "服主");
+        default:         copy(szOut, iLen, "普通玩家");
     }
 }
 
@@ -113,15 +150,13 @@ stock perm_sync_level_from_flags(id)
 // ============================================================
 public plugin_init()
 {
-    register_plugin("HNS Admin Suite", "4.2.0", "GTRHNS");
+    register_plugin("HNS Admin Suite", "5.0.0", "GTRHNS");
 
     // 命令注册
     register_clcmd("say /vipadmin", "cmdVipAdmin");
     register_clcmd("say /permcheck", "cmdPermCheck");
     register_clcmd("say /hide", "cmdToggleHide");
     register_clcmd("say", "cmdSayHandler");
-
-    // ???????? ChatManager??????? SayText
 
     // 菜单注册
     register_menucmd(register_menuid("Perm Main"), 1023, "handlePermMain");
@@ -130,6 +165,9 @@ public plugin_init()
     register_menucmd(register_menuid("Perm Ban Time"), 1023, "handlePermBanTime");
     register_menucmd(register_menuid("Admin Menu"), 1023, "handleAdminMenu");
     register_menucmd(register_menuid("Perm Map List"), 1023, "handlePermMapList");
+
+    // 读取管理密码配置
+    load_perm_config();
 
     // 启动时加载文件备份到PDS
     perm_load_file();
@@ -147,12 +185,67 @@ public plugin_init()
 }
 
 // ============================================================
+//  管理密码配置 (perm_config.ini)
+// ============================================================
+load_perm_config()
+{
+    new szDir[128];
+    get_configsdir(szDir, charsmax(szDir));
+    new szFile[256];
+    formatex(szFile, charsmax(szFile), "%s/permsystem/perm_config.ini", szDir);
+
+    // 文件不存在则自动生成
+    if (!file_exists(szFile)) {
+        new fp = fopen(szFile, "wt");
+        if (fp) {
+            fprintf(fp, "; ============================================^n");
+            fprintf(fp, ";  HNS 管理密码配置 (ini 为权威)^n");
+            fprintf(fp, "; ============================================^n");
+            fprintf(fp, ";  此文件是管理密码的唯一权威来源。^n");
+            fprintf(fp, ";  请修改下面的密码, 上线前务必修改默认密码!^n");
+            fprintf(fp, ";  密码一经修改立即生效, 无需重新编译插件。^n");
+            fprintf(fp, "; ============================================^n^n");
+            fprintf(fp, "admin_password = 890514^n");
+            fclose(fp);
+        }
+    }
+
+    // 读取密码
+    new fp = fopen(szFile, "rt");
+    if (fp) {
+        new szLine[128];
+        while (!feof(fp)) {
+            fgets(fp, szLine, charsmax(szLine));
+            trim(szLine);
+            if (szLine[0] == ';' || szLine[0] == '^0') continue;
+
+            if (containi(szLine, "admin_password") == 0) {
+                new szVal[32];
+                parse(szLine, szVal, charsmax(szVal), szVal, charsmax(szVal));
+                // 去掉左侧键名
+                new iPos = contain(szLine, "=");
+                if (iPos != -1) {
+                    copy(szVal, charsmax(szVal), szLine[iPos + 1]);
+                    trim(szVal);
+                    if (szVal[0]) {
+                        copy(g_szAdminPassword, charsmax(g_szAdminPassword), szVal);
+                    }
+                }
+                break;
+            }
+        }
+        fclose(fp);
+    }
+}
+
+// ============================================================
 //  玩家连接/断开
 // ============================================================
 public client_putinserver(id)
 {
     // 初始化变量
     g_iPermLevel[id] = PERM_NONE;
+    g_bOfficial[id] = false;
     g_bVerified[id] = false;
     g_bWaitingPassword[id] = false;
     g_bHidden[id] = false;
@@ -196,6 +289,9 @@ public client_authorized(id)
         return;
     }
 
+    // 捕获官方认证状态 (users.ini 授权后 is_user_admin 才准确)
+    g_bOfficial[id] = (is_user_connected(id) && is_user_admin(id));
+
     // Steam验证后重新加载权限(SteamID可能更准确)
     new szAuth[64];
     get_user_authid(id, szAuth, charsmax(szAuth));
@@ -212,6 +308,7 @@ public client_authorized(id)
 public client_disconnected(id)
 {
     g_iPermLevel[id] = PERM_NONE;
+    g_bOfficial[id] = false;
     g_bVerified[id] = false;
     g_bWaitingPassword[id] = false;
     g_bHidden[id] = false;
@@ -231,18 +328,13 @@ public cmdVipAdmin(id)
         return PLUGIN_HANDLED;
     }
 
-    // ★ 免密直接进入：已具备 AMXX 服主标志 m (users.ini 配了最高权限) 的玩家
-    //   (m=服主, 见 openhns-prefixes.ini)，无需输密码即可打开权限管理菜单
-    if (get_user_flags(id) & read_flags("m")) {
-        g_bVerified[id] = true;
-        g_bWaitingPassword[id] = false;
-        g_iPermLevel[id] = PERM_OWNER;
-        perm_apply_user_flags(id);
-        show_perm_main_menu(id);
+    // ★ 非官方认证: 直接拒绝, 不授予任何管理权限
+    if (!g_bOfficial[id]) {
+        client_print(id, print_chat, "[HNS] 你不是官方认证管理员，无法使用权限管理系统");
         return PLUGIN_HANDLED;
     }
 
-    // 如果已经验证过，直接打开主菜单
+    // 如果已经双重认证通过，直接打开主菜单
     if (g_bVerified[id]) {
         show_perm_main_menu(id);
         return PLUGIN_HANDLED;
@@ -250,7 +342,7 @@ public cmdVipAdmin(id)
 
     // 提示输入密码
     g_bWaitingPassword[id] = true;
-    client_print(id, print_chat, "[HNS] 请在聊天框输入管理密码以验证身份");
+    client_print(id, print_chat, "[HNS] 请在聊天框输入管理密码以完成双重认证");
     client_print(id, print_chat, "[HNS] 输入格式: 直接在聊天框输入密码即可");
 
     return PLUGIN_HANDLED;
@@ -266,23 +358,7 @@ public cmdPermCheck(id)
     }
 
     new szLevel[32];
-    switch (g_iPermLevel[id]) {
-        case PERM_NONE: {
-            copy(szLevel, charsmax(szLevel), "普通玩家");
-        }
-        case PERM_TEMP: {
-            copy(szLevel, charsmax(szLevel), "??");
-        }
-        case PERM_VIP: {
-            copy(szLevel, charsmax(szLevel), "VIP");
-        }
-        case PERM_ADMIN: {
-            copy(szLevel, charsmax(szLevel), "???");
-        }
-        case PERM_OWNER: {
-            copy(szLevel, charsmax(szLevel), "??");
-        }
-    }
+    perm_level_name(g_iPermLevel[id], szLevel, charsmax(szLevel));
 
     client_print(id, print_chat, "[HNS] 你的权限等级: %s (等级 %d)", szLevel, g_iPermLevel[id]);
 
@@ -298,8 +374,8 @@ public cmdToggleHide(id)
         return PLUGIN_HANDLED;
     }
 
-    if (g_iPermLevel[id] != PERM_OWNER) {
-        client_print(id, print_chat, "[HNS] 只有最高服主才能使用隐藏身份功能");
+    if (!g_bOfficial[id] || !g_bVerified[id]) {
+        client_print(id, print_chat, "[HNS] 只有通过认证的官方服主才能使用隐藏身份功能");
         return PLUGIN_HANDLED;
     }
 
@@ -315,7 +391,7 @@ public cmdToggleHide(id)
 }
 
 // ============================================================
-//  聊天拦截: 密码验证
+//  聊天拦截: 密码验证 (双重认证)
 // ============================================================
 public cmdSayHandler(id)
 {
@@ -331,13 +407,20 @@ public cmdSayHandler(id)
         trim(szArgs);
 
         // 检查是否是密码
-        if (equal(szArgs, ADMIN_PASSWORD)) {
+        if (equal(szArgs, g_szAdminPassword)) {
             g_bWaitingPassword[id] = false;
+
+            // 密码正确, 但非官方认证: 拒绝使用, 不封禁
+            if (!g_bOfficial[id]) {
+                client_print(id, print_chat, "[HNS] 密码正确，但你不是官方认证管理员，无法使用权限管理系统");
+                return PLUGIN_HANDLED; // 不显示密码消息
+            }
+
+            // 官方 + 密码双重认证通过
             g_bVerified[id] = true;
-            // 密码验证成功 → 自动授予最高服主权限
             g_iPermLevel[id] = PERM_OWNER;
             perm_apply_user_flags(id);
-            client_print(id, print_chat, "[HNS] 密码验证成功！您已成为最高服主，权限管理菜单已打开");
+            client_print(id, print_chat, "[HNS] 双重认证通过！权限管理菜单已打开");
             show_perm_main_menu(id);
             return PLUGIN_HANDLED; // 不显示密码消息
         } else {
@@ -391,9 +474,9 @@ public handlePermMain(id, key)
 
     switch (key) {
         case 0: {
-            // 发放管理权限 - 需要服主权限
-            if (g_iPermLevel[id] != PERM_OWNER) {
-                client_print(id, print_chat, "[HNS] 只有最高服主才能发放管理权限");
+            // 发放管理权限 - 需要官方服主
+            if (!is_official(id)) {
+                client_print(id, print_chat, "[HNS] 只有官方认证服主才能发放管理权限");
                 show_perm_main_menu(id);
                 return;
             }
@@ -402,9 +485,9 @@ public handlePermMain(id, key)
             show_select_player_menu(id);
         }
         case 1: {
-            // 发放VIP权限 - 需要服主权限
-            if (g_iPermLevel[id] != PERM_OWNER) {
-                client_print(id, print_chat, "[HNS] 只有最高服主才能发放VIP权限");
+            // 发放VIP权限 - 需要官方服主
+            if (!is_official(id)) {
+                client_print(id, print_chat, "[HNS] 只有官方认证服主才能发放VIP权限");
                 show_perm_main_menu(id);
                 return;
             }
@@ -413,9 +496,9 @@ public handlePermMain(id, key)
             show_select_player_menu(id);
         }
         case 2: {
-            // 清除权限 - 需要服主权限
-            if (g_iPermLevel[id] != PERM_OWNER) {
-                client_print(id, print_chat, "[HNS] 只有最高服主才能清除权限");
+            // 清除权限 - 需要官方服主
+            if (!is_official(id)) {
+                client_print(id, print_chat, "[HNS] 只有官方认证服主才能清除权限");
                 show_perm_main_menu(id);
                 return;
             }
@@ -425,13 +508,13 @@ public handlePermMain(id, key)
         }
         case 3: {
             // 最高服主权限（给自己）
-            if (g_iPermLevel[id] != PERM_OWNER) {
-                client_print(id, print_chat, "[HNS] 只有最高服主才能使用此功能");
+            if (!is_official(id)) {
+                client_print(id, print_chat, "[HNS] 只有官方认证服主才能使用此功能");
                 show_perm_main_menu(id);
                 return;
             }
             // 已经是服主了，提示
-            client_print(id, print_chat, "[HNS] 你已经是最高服主了");
+            client_print(id, print_chat, "[HNS] 你已经是官方认证服主了");
             show_perm_main_menu(id);
         }
         case 4: {
@@ -465,25 +548,8 @@ show_online_perm_list(id)
 
     for (new i = 0; i < num && iCount < 9; i++) {
         new pid = players[i];
-        new szPermName[32];
-
-        switch (g_iPermLevel[pid]) {
-            case PERM_TEMP: {
-                copy(szPermName, charsmax(szPermName), "??");
-            }
-            case PERM_NONE: {
-                copy(szPermName, charsmax(szPermName), "普通");
-            }
-            case PERM_VIP: {
-                copy(szPermName, charsmax(szPermName), "VIP");
-            }
-            case PERM_ADMIN: {
-                copy(szPermName, charsmax(szPermName), "???");
-            }
-            case PERM_OWNER: {
-                copy(szPermName, charsmax(szPermName), "??");
-            }
-        }
+        new szPermName[16];
+        perm_level_name(g_iPermLevel[pid], szPermName, charsmax(szPermName));
 
         new szPlayerName[32];
         get_user_name(pid, szPlayerName, charsmax(szPlayerName));
@@ -537,23 +603,7 @@ show_select_player_menu(id)
         get_user_name(pid, szPlayerName, charsmax(szPlayerName));
 
         new szPermName[16];
-        switch (g_iPermLevel[pid]) {
-            case PERM_NONE: {
-                copy(szPermName, charsmax(szPermName), "普通");
-            }
-            case PERM_VIP: {
-                copy(szPermName, charsmax(szPermName), "VIP");
-            }
-            case PERM_TEMP: {
-                copy(szPermName, charsmax(szPermName), "??");
-            }
-            case PERM_ADMIN: {
-                copy(szPermName, charsmax(szPermName), "???");
-            }
-            case PERM_OWNER: {
-                copy(szPermName, charsmax(szPermName), "??");
-            }
-        }
+        perm_level_name(g_iPermLevel[pid], szPermName, charsmax(szPermName));
 
         len += formatex(szMenu[len], charsmax(szMenu) - len, "\r%d. \w%s \y(%s)^n", (i - iStart) + 1, szPlayerName, szPermName);
     }
@@ -627,8 +677,8 @@ public handlePermSelectPlayer(id, key)
                 }
                 case 3: {
                     // 发管理权限
-                    if (g_iPermLevel[id] != PERM_OWNER) {
-                        client_print(id, print_chat, "[HNS] 只有最高服主才能发放管理权限");
+                    if (!is_official(id)) {
+                        client_print(id, print_chat, "[HNS] 只有官方认证服主才能发放管理权限");
                         show_select_player_menu(id);
                         return;
                     }
@@ -646,8 +696,8 @@ public handlePermSelectPlayer(id, key)
                 }
                 case 4: {
                     // 发VIP权限
-                    if (g_iPermLevel[id] != PERM_OWNER) {
-                        client_print(id, print_chat, "[HNS] 只有最高服主才能发放VIP权限");
+                    if (!is_official(id)) {
+                        client_print(id, print_chat, "[HNS] 只有官方认证服主才能发放VIP权限");
                         show_select_player_menu(id);
                         return;
                     }
@@ -664,8 +714,8 @@ public handlePermSelectPlayer(id, key)
                 }
                 case 5: {
                     // 清除权限
-                    if (g_iPermLevel[id] != PERM_OWNER) {
-                        client_print(id, print_chat, "[HNS] 只有最高服主才能清除权限");
+                    if (!is_official(id)) {
+                        client_print(id, print_chat, "[HNS] 只有官方认证服主才能清除权限");
                         show_select_player_menu(id);
                         return;
                     }
@@ -725,8 +775,6 @@ show_kick_reason_menu(id, target)
         return;
     }
 
-    // 保存目标到菜单action中(复用g_iMenuAction存目标id的低16位)
-    // 我们用一个额外数组保存踢人目标
     new szMenu[512];
     new len;
 
@@ -1231,7 +1279,7 @@ toggle_pause_match(id)
     // rg_round_pause 可以暂停/恢复回合
     set_cvar_num("pausable", 1);
 
-    // ???????????????????
+    // 暂停/恢复比赛
     server_cmd("pause");
 
     client_print(0, print_chat, "[HNS] 比赛已暂停/恢复");
@@ -1272,7 +1320,7 @@ restart_round(id)
 
     // 使用ReAPI重开回合
     server_cmd("sv_restart 1");
-	// rg_round_restart replaced
+    // rg_round_restart replaced
     client_print(0, print_chat, "[HNS] 管理员已重开回合");
 }
 
@@ -1426,22 +1474,23 @@ format_ban_time(iSeconds, szBuffer[], iLen)
     }
 }
 
-// 保存封禁列表到文件
+// 保存封禁列表到文件 (ini)
 save_bans_file()
 {
     new szDir[128];
     get_configsdir(szDir, charsmax(szDir));
     new szFile[256];
-    formatex(szFile, charsmax(szFile), "%s/permsystem/ban_list.txt", szDir);
+    formatex(szFile, charsmax(szFile), "%s/permsystem/ban_list.ini", szDir);
 
     new fp = fopen(szFile, "wt");
     if (!fp) {
         return;
     }
 
-    fprintf(fp, "; HNS Admin Suite Ban List^n");
-    fprintf(fp, "; Format: authid/ip expire_timestamp reason^n");
-    fprintf(fp, "; expire 0 = permanent^n^n");
+    fprintf(fp, "; HNS Admin Suite 封禁名单 (ini 为权威)^n");
+    fprintf(fp, "; 格式: authid/ip expire_timestamp reason^n");
+    fprintf(fp, "; 过期时间 0 = 永久^n");
+    fprintf(fp, "; 本文件由插件自动管理, 通常无需手动编辑^n^n");
 
     for (new i = 0; i < g_iBanCount; i++) {
         fprintf(fp, "^"%s^" %d ^"%s^"^n", g_szBannedAuth[i], g_iBanExpire[i], g_szBanReason[i]);
@@ -1450,13 +1499,13 @@ save_bans_file()
     fclose(fp);
 }
 
-// 从文件加载封禁列表
+// 从文件加载封禁列表 (ini)
 load_bans_file()
 {
     new szDir[128];
     get_configsdir(szDir, charsmax(szDir));
     new szFile[256];
-    formatex(szFile, charsmax(szFile), "%s/permsystem/ban_list.txt", szDir);
+    formatex(szFile, charsmax(szFile), "%s/permsystem/ban_list.ini", szDir);
 
     new fp = fopen(szFile, "rt");
     if (!fp) {
@@ -1602,8 +1651,21 @@ load_map_list()
 }
 
 // ============================================================
-//  权限保存/加载 (PDS + 文件双备份)
+//  权限保存/加载 (PDS + ini 文件双备份)
 // ============================================================
+
+// 同步玩家权限等级(从flags较高者)
+stock perm_sync_level_from_flags(id)
+{
+    if (!is_user_connected(id)) {
+        return;
+    }
+
+    new iDetectedLevel = perm_level_from_flags(get_user_flags(id));
+    if (iDetectedLevel > g_iPermLevel[id]) {
+        g_iPermLevel[id] = iDetectedLevel;
+    }
+}
 
 // 保存玩家权限到PDS和文件
 stock perm_save(id)
@@ -1667,7 +1729,7 @@ stock perm_load(id)
     new szDir[128];
     get_configsdir(szDir, charsmax(szDir));
     new szFile[256];
-    formatex(szFile, charsmax(szFile), "%s/permsystem/perm_list.txt", szDir);
+    formatex(szFile, charsmax(szFile), "%s/permsystem/perm_list.ini", szDir);
 
     new fp = fopen(szFile, "rt");
     if (!fp) {
@@ -1704,10 +1766,10 @@ stock perm_load(id)
 
         if (equal(szAuth, g_szAuth[id])) {
             new iPerm = str_to_num(szPerm);
-            // ???????? 1=VIP 2=?? 3=?? ? ? 2=VIP 3=?? 4=??
+            // 旧版本迁移: 1=VIP 2=管理员 3=服主 → 2=VIP 3=管理员 4=服主
             if (iFileVersion < PERM_STORAGE_VERSION && iPerm >= 1 && iPerm <= 3)
                 iPerm += 1;
-            
+
             if (iPerm >= PERM_NONE && iPerm <= PERM_OWNER) {
                 g_iPermLevel[id] = iPerm;
 
@@ -1726,13 +1788,13 @@ stock perm_load(id)
     }
 }
 
-// 写入文件备份
+// 写入文件备份 (ini)
 stock perm_save_file()
 {
     new szDir[128];
     get_configsdir(szDir, charsmax(szDir));
     new szFile[256];
-    formatex(szFile, charsmax(szFile), "%s/permsystem/perm_list.txt", szDir);
+    formatex(szFile, charsmax(szFile), "%s/permsystem/perm_list.ini", szDir);
 
     // ★ 先读取现有文件中的全部历史记录(含离线玩家)，避免覆盖丢失
     new Trie:tExisting = TrieCreate();
@@ -1762,10 +1824,13 @@ stock perm_save_file()
         return;
     }
 
-    fprintf(fp, "; HNS Admin Suite Permission List^n");
+    fprintf(fp, "; HNS Admin Suite 权限名单 (ini 为权威)^n");
     fprintf(fp, "; StorageVersion: %d^n", PERM_STORAGE_VERSION);
-    fprintf(fp, "; Format: steamid_or_ip name permission_level^n");
-    fprintf(fp, "; Levels: 0=normal 1=helper 2=vip 3=admin 4=owner^n^n");
+    fprintf(fp, "; 格式: steamid_or_ip name permission_level^n");
+    fprintf(fp, "; 等级: 0=普通 1=临时 2=VIP 3=管理员 4=服主^n");
+    fprintf(fp, "; 重要: 本文件是纸面权限的唯一权威。玩家不在本文件里 = 普通玩家。^n");
+    fprintf(fp, "; 官方认证服主由 users.ini 管理, 不受本文件限制。^n");
+    fprintf(fp, "; 清除某人的记录 = 立即失效其纸面权限。^n^n");
 
     new players[32], num;
     get_players(players, num);
@@ -1809,13 +1874,13 @@ stock perm_save_file()
     fclose(fp);
 }
 
-// 启动时从文件加载到PDS
+// 启动时从文件加载到PDS (ini)
 stock perm_load_file()
 {
     new szDir[128];
     get_configsdir(szDir, charsmax(szDir));
     new szFile[256];
-    formatex(szFile, charsmax(szFile), "%s/permsystem/perm_list.txt", szDir);
+    formatex(szFile, charsmax(szFile), "%s/permsystem/perm_list.ini", szDir);
 
     new fp = fopen(szFile, "rt");
     if (!fp) {
